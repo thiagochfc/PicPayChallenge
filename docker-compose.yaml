@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:17.2-alpine3.20
+    container_name: PicPayChallenge_postgresql
+    user: root
+    restart: always
+    environment:
+      - POSTGRES_PASSWORD=PicPayChallenge_password
+      - POSTGRES_USER=PicPayChallenge_user
+      - POSTGRES_DB=PicPayChallenge
+    expose:
+      - 5432
+    ports:
+      - "5432:5432"
+    networks:
+      - PicPayChallenge_network
+        
+networks:
+  PicPayChallenge_network:
+    driver: bridge

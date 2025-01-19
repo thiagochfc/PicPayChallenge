@@ -14,5 +14,9 @@
     <PackageReference Include="Moonad" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
   </ItemGroup>
+  
+  <ItemGroup>
+    <Folder Include="Infrastructure\Migrations\" />
+  </ItemGroup>
 
 </Project>

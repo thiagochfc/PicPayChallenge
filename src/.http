@@ -1,1 +1,19 @@
 @host = http://localhost:5080
+
+### Accounts
+
+POST {{host}}/accounts
+Content-Type: application/json
+Accept: application/json
+
+### Transfers
+
+POST {{host}}/transfer
+Content-Type: application/json
+Accept: application/json
+
+{
+  "payer": "0194803e-b417-7ad0-b275-c156bed8d8ac",
+  "payee": "0194803e-b418-7631-b62e-2b21df3f8a2c",
+  "value": 500.0
+}
