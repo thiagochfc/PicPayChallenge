@@ -4,8 +4,8 @@ namespace PicPayChallenge.Requests;
 
 public record TransferRequest(
     [Required]
-    string Payer,
+    Guid Payer,
     [Required]
-    string Payee,
+    Guid Payee,
     [Required]
     decimal Value);

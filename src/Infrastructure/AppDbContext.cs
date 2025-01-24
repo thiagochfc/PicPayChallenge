@@ -15,7 +15,7 @@ public class AppDbContext(IConfiguration configuration) : DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         ArgumentNullException.ThrowIfNull(modelBuilder);
-        
         modelBuilder.ApplyConfiguration(new AccountEntityTypeConfiguration());
+        base.OnModelCreating(modelBuilder);
     }
 }

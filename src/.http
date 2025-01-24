@@ -13,7 +13,7 @@ Content-Type: application/json
 Accept: application/json
 
 {
-  "payer": "0194803e-b417-7ad0-b275-c156bed8d8ac",
-  "payee": "0194803e-b418-7631-b62e-2b21df3f8a2c",
-  "value": 500.0
+  "payer": "01949571-fa78-717a-88db-74f42ac7fd57",
+  "payee": "01949571-fa78-7394-b7e1-80c78c633335",
+  "value": 1000.00
 }

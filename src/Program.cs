@@ -2,10 +2,11 @@ using Microsoft.EntityFrameworkCore;
 
 using Moonad;
 
+using PicPayChallenge.Extensions;
 using PicPayChallenge.Infrastructure;
 using PicPayChallenge.Models;
 using PicPayChallenge.Requests;
-using PicPayChallenge.Responses;
+using PicPayChallenge.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -13,18 +14,10 @@ var builder = WebApplication.CreateBuilder(args);
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 builder.Services.AddDbContext<AppDbContext>();
-builder.Services.AddHttpClient("Authorization", options =>
-{
-    string uri = builder.Configuration.GetSection("Authorization:UrlBase").Value ?? throw new ArgumentException("Authorization:UrlBase"); 
-    options.BaseAddress = new Uri(uri);
-    options.Timeout = TimeSpan.FromSeconds(1);
-});
-builder.Services.AddHttpClient("Notification", options =>
-{
-    string uri = builder.Configuration.GetSection("Notification:UrlBase").Value ?? throw new ArgumentException("Notification:UrlBase"); 
-    options.BaseAddress = new Uri(uri);
-    options.Timeout = TimeSpan.FromSeconds(5);
-});
+builder.Services.AddScoped<IAccountService, AccountService>();
+builder.AddAuthorizationServices();
+builder.AddNotificationServices();
+builder.AddTransferServices();
 
 var app = builder.Build();
 
@@ -50,7 +43,7 @@ app.MapPost("/accounts", async (
     if (!existAccounts)
     {
         logger.LogInformation("Account not exists!");
-        
+
         IEnumerable<Account> accountsCreate =
         [
             Account.Create("Ariana Estellet Ferreira",
@@ -90,70 +83,56 @@ app.MapPost("/accounts", async (
         .AsNoTrackingWithIdentityResolution()
         .ToListAsync(cancellationToken)
         .ConfigureAwait(false);
-    
+
     return TypedResults.Ok(accounts);
 });
 
 app.MapPost("/transfer", async (
     TransferRequest request,
-    AppDbContext dbContext,
-    IHttpClientFactory httpClientFactory,
+    IAccountService accountService,
+    ITransferService transferService,
+    ILogger<Program> logger,
     CancellationToken cancellationToken) =>
 {
-    var httpClientAuthorization = httpClientFactory.CreateClient("Authorization");
-    var httpClientNotification = httpClientFactory.CreateClient("Notification");
-    Option<Account> payerOption = await GetAccountByIdAsync(request.Payer).ConfigureAwait(false);
-    
-    if (payerOption.IsNone)
-    {
-        return Results.BadRequest();
-    }
-
-    var payer = payerOption.Get();
-    if (payer.Type == TypeAccount.Shopkeeper)
-    {
-        return Results.Conflict();
-    }
-    
-    Option<Account> payeeOption = await GetAccountByIdAsync(request.Payee).ConfigureAwait(false);
-    
-    if (payeeOption.IsNone)
-    {
-        return Results.BadRequest();
-    }
-    
-    var payee = payeeOption.Get();
-
-    var resultWithdraw = payer.Withdraw(request.Value);
-    payee.Deposit(request.Value);
-
-    if (resultWithdraw.IsError)
-    {
-        return Results.UnprocessableEntity();
-    }
-
-    var resultAuthorize = await httpClientAuthorization
-        .GetFromJsonAsync<AuthorizationResponse>(httpClientAuthorization.BaseAddress, cancellationToken)
+    var payerOption = await accountService
+        .GetByIdAsync(request.Payer, cancellationToken)
         .ConfigureAwait(false);
 
-    if (!(resultAuthorize?.Data.Authorization ?? false))
+    if (payerOption.IsNone)
     {
-        return Results.Unauthorized();
+        logger.LogInformation("The payer does not exist");
+        return Results.BadRequest();
     }
     
-    dbContext.Accounts.Update(payer);
-    dbContext.Accounts.Update(payee);
-    await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+    Option<Account> payeeOption = await accountService
+        .GetByIdAsync(request.Payee, cancellationToken)
+        .ConfigureAwait(false);
 
-    await httpClientNotification.GetAsync(httpClientNotification.BaseAddress, cancellationToken).ConfigureAwait(false);
+    if (payeeOption.IsNone)
+    {
+        logger.LogInformation("The payee does not exist");
+        return Results.BadRequest();
+    }
     
-    return Results.Ok();
+    var resultTransfer = await transferService
+        .HandleAsync(payerOption, payeeOption, request.Value, cancellationToken)
+        .ConfigureAwait(false);
 
-    Task<Account?> GetAccountByIdAsync(string id) =>
-        dbContext
-            .Accounts
-            .AsNoTrackingWithIdentityResolution()
-            .FirstOrDefaultAsync(x => x.Id.Equals(Guid.Parse(id)), cancellationToken);
+    if (resultTransfer.IsError)
+    {
+        return resultTransfer.ErrorValue switch
+        {
+            InvalidTypeAccountError => Results.Conflict(),
+            NoBalanceError => Results.UnprocessableEntity(),
+            UnauthorizedError => Results.Unauthorized(),
+            _ => Results.BadRequest()
+        };
+    }
+    
+    await accountService.SaveAsync(payerOption, cancellationToken).ConfigureAwait(false);
+    await accountService.SaveAsync(payeeOption, cancellationToken).ConfigureAwait(false);
+
+    return Results.Ok();
 });
 
 await app
